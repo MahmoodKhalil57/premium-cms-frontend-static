@@ -20,9 +20,18 @@ const sqliteDatabase = {
 	supportsCollectionDeletionGuard: false,
 };
 
+// On GitHub Pages project sites the URL is <user>.github.io/<repo>, so split
+// SITE_URL into the origin (site) and the subpath (base) — otherwise assets are
+// linked at /_astro/… and 404. A custom domain sets SITE_URL to the root, so
+// base becomes "/" automatically.
+const _rawSite = process.env.SITE_URL || "https://example.com";
+let _site = _rawSite, _base = "/";
+try { const u = new URL(_rawSite); _site = u.origin; _base = u.pathname.replace(/\/+$/, "") || "/"; } catch {}
+
 export default defineConfig({
 	output: "static",
-	site: process.env.SITE_URL || "https://example.com",
+	site: _site,
+	base: _base,
 	image: { layout: "constrained", responsiveStyles: true },
 	integrations: [
 		react(),
