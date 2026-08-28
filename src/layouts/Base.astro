@@ -46,11 +46,21 @@ const pageCtx = createPublicPageContext({
 	seo: { ogImage: image },
 	siteName: siteTitle,
 });
+
+// Force the custom domain: a static Pages build is publicly reachable at its
+// raw <owner>.github.io/<repo> URL, but only resolves correctly at the domain
+// root (base "/") behind the proxy. Bounce any direct github.io visitor to the
+// canonical origin so the frontend is only ever served through our custom link.
+const canonicalOrigin = Astro.site ? Astro.site.origin : "";
+const canonicalGuard = canonicalOrigin
+	? `(function(){try{var C=${JSON.stringify(canonicalOrigin)};if(location.origin!==C&&/\\.github\\.io$/i.test(location.hostname)){location.replace(C+location.pathname+location.search+location.hash);}}catch(e){}})();`
+	: "";
 ---
 
 <!doctype html>
 <html lang="en">
 	<head>
+		{canonicalGuard && <script is:inline set:html={canonicalGuard}></script>}
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>{fullTitle}</title>
@@ -622,3 +632,4 @@ const pageCtx = createPublicPageContext({
 		</style>
 	</body>
 </html>
+
