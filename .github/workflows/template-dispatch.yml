@@ -1,0 +1,22 @@
+# Only meaningful in a frontend TEMPLATE repo (guarded by the repo variable
+# IS_FRONTEND_TEMPLATE, which generated site repos don't inherit): a push here
+# tells the themes repo to re-sync every provisioned site's frontend with the
+# template and rebuild it.
+name: Notify the platform
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  dispatch:
+    if: vars.IS_FRONTEND_TEMPLATE == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api repos/MahmoodKhalil57/premium-cms-themes/dispatches \
+            -f event_type=frontend-template-updated \
+            -f "client_payload[template]=${{ github.repository }}"
