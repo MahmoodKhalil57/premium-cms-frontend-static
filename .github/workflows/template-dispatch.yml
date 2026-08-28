@@ -1,22 +1,21 @@
 # Only meaningful in a frontend TEMPLATE repo (guarded by the repo variable
 # IS_FRONTEND_TEMPLATE, which generated site repos don't inherit): a push here
-# tells the themes repo to re-sync every provisioned site's frontend with the
-# template and rebuild it.
-name: Notify the platform
+# asks the platform's root control plane to re-sync every provisioned site's
+# frontend with this template and rebuild it.
+name: Sync sites with this template
 
 on:
   push:
     branches: [main]
 
 jobs:
-  dispatch:
+  roll:
     if: vars.IS_FRONTEND_TEMPLATE == 'true'
     runs-on: ubuntu-latest
     steps:
       - env:
-          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          MASTER_PLATFORM_TOKEN: ${{ secrets.MASTER_PLATFORM_TOKEN }}
         run: |
           set -euo pipefail
-          gh api repos/MahmoodKhalil57/premium-cms-themes/dispatches \
-            -f event_type=frontend-template-updated \
-            -f "client_payload[template]=${{ github.repository }}"
+          curl -sSf https://raw.githubusercontent.com/MahmoodKhalil57/premium-cms-themes/main/bin/roll.sh -o roll.sh
+          bash roll.sh frontend
