@@ -5,7 +5,8 @@
 	"scripts": {
 		"build": "astro build",
 		"check:cf": "node bin/check-cf.mjs",
-		"test:cf": "bun test tests/ci"
+		"test:cf": "bun test tests/ci",
+		"test:preview:cf": "bun test tests/preview"
 	},
 	"dependencies": {
 		"@astrojs/react": "^6.0.4",
