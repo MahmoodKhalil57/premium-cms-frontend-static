@@ -1,24 +1,60 @@
-// Static-frontend build: renders the public site to static HTML from a local
-// SQLite snapshot (bin/snapshot-to-sqlite.mjs), for hosting on GitHub Pages.
-// No Cloudflare adapter, no Worker — EmDash's getDb() points at the snapshot
-// file via a raw @premium-cms/emdash/db/sqlite descriptor, so the existing
-// frontend data layer renders unchanged.
+// Static-frontend project: renders the public site with EmDash's data layer,
+// no local backend and no Cloudflare adapter. Two data modes, picked by env:
+//
+//  - LIVE (default for `bun dev`): BACKEND_URL + EMDASH_API_TOKEN set — getDb()
+//    reads an in-memory database continuously refreshed from the live backend's
+//    /_emdash/api/snapshot (@premium-cms/emdash/db/snapshot-live). Publish in
+//    the admin, reload the page: no snapshot file, no pull step. /_emdash/* on
+//    the dev server proxies to the backend, same-origin like the previews.
+//  - FILE (the platform's container builds): EMDASH_SNAPSHOT_DB points at a
+//    snapshot.db materialized by bin/snapshot-to-sqlite.mjs; `astro build`
+//    renders from it (GitHub Pages hosting).
 import react from "@astrojs/react";
 import icon from "astro-iconset";
 import { defineConfig, fontProviders } from "astro/config";
 import emdash from "@premium-cms/emdash/astro";
+import { readFileSync } from "node:fs";
 
-const snapshotFile = process.env.EMDASH_SNAPSHOT_DB || "snapshot.db";
+// `bun run` / `npm run` do not always hand .env to the astro process: load it
+// ourselves — only for variables that are not already set.
+try {
+	for (const line of readFileSync(".env", "utf8").split("\n")) {
+		const m = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+		if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+	}
+} catch {
+	// no .env — the environment must carry the values
+}
 
-const sqliteDatabase = {
-	entrypoint: "@premium-cms/emdash/db/sqlite",
-	config: { url: `file:${snapshotFile}` },
-	type: "sqlite",
-	migrations: { entrypoint: "@premium-cms/emdash/db/sqlite-migrations", manifestConfig: { url: `file:${snapshotFile}` } },
-	supportsRequestScope: false,
-	supportsCoalescing: false,
-	supportsCollectionDeletionGuard: false,
-};
+const snapshotFile = process.env.EMDASH_SNAPSHOT_DB;
+const backend = (process.env.BACKEND_URL || "").replace(/\/+$/, "");
+const liveMode = !snapshotFile && !!backend && !!process.env.EMDASH_API_TOKEN;
+
+const database = liveMode
+	? {
+			entrypoint: "@premium-cms/emdash/db/snapshot-live",
+			config: {
+				url: backend,
+				token: process.env.EMDASH_API_TOKEN,
+				includeDrafts: ["1", "true"].includes(process.env.EMDASH_INCLUDE_DRAFTS || ""),
+			},
+			type: "sqlite",
+			supportsRequestScope: false,
+			supportsCoalescing: false,
+			supportsCollectionDeletionGuard: false,
+		}
+	: {
+			entrypoint: "@premium-cms/emdash/db/sqlite",
+			config: { url: `file:${snapshotFile || "snapshot.db"}` },
+			type: "sqlite",
+			migrations: {
+				entrypoint: "@premium-cms/emdash/db/sqlite-migrations",
+				manifestConfig: { url: `file:${snapshotFile || "snapshot.db"}` },
+			},
+			supportsRequestScope: false,
+			supportsCoalescing: false,
+			supportsCollectionDeletionGuard: false,
+		};
 
 // On GitHub Pages project sites the URL is <user>.github.io/<repo>, so split
 // SITE_URL into the origin (site) and the subpath (base) — otherwise assets are
@@ -33,11 +69,16 @@ export default defineConfig({
 	site: _site,
 	base: _base,
 	image: { layout: "constrained", responsiveStyles: true },
+	// In live mode the dev server forwards backend API calls (forms, commerce,
+	// auth) to the live instance, so client-side features work same-origin.
+	vite: liveMode
+		? { server: { proxy: { "/_emdash": { target: backend, changeOrigin: true } } } }
+		: {},
 	integrations: [
 		react(),
 		icon({ include: { ph: ["chart-bar","check-circle","clock","cloud","code","currency-dollar","envelope","globe","heart","lifebuoy","lightning","lock","shield-check","sparkle","star","users-three"] } }),
 		emdash({
-			database: sqliteDatabase,
+			database,
 			staticFrontend: true,
 			plugins: [
 				{
