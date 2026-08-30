@@ -3,7 +3,7 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"dev": "node bin/snapshot-to-sqlite.mjs && astro dev",
+		"dev": "astro dev",
 		"build": "astro build",
 		"check:cf": "node bin/check-cf.mjs",
 		"test:cf": "bun test tests/ci",
