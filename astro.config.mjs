@@ -1,14 +1,11 @@
 // Static-frontend project: renders the public site with EmDash's data layer,
-// no local backend and no Cloudflare adapter. Two data modes, picked by env:
-//
-//  - LIVE (default for `bun dev`): BACKEND_URL + EMDASH_API_TOKEN set — getDb()
-//    reads an in-memory database continuously refreshed from the live backend's
-//    /_emdash/api/snapshot (@premium-cms/emdash/db/snapshot-live). Publish in
-//    the admin, reload the page: no snapshot file, no pull step. /_emdash/* on
-//    the dev server proxies to the backend, same-origin like the previews.
-//  - FILE (the platform's container builds): EMDASH_SNAPSHOT_DB points at a
-//    snapshot.db materialized by bin/snapshot-to-sqlite.mjs; `astro build`
-//    renders from it (GitHub Pages hosting).
+// live-connected to the deployed backend — no local backend, no snapshot file,
+// no Cloudflare adapter. getDb() reads an in-memory database built from the
+// backend's /_emdash/api/snapshot (@premium-cms/emdash/db/snapshot-live):
+// `astro dev` keeps it refreshed (publish in the admin, reload the page) and
+// the platform's container `astro build` renders from one frozen fetch of the
+// same source. /_emdash/* on the dev server proxies to the backend, so
+// client-side features and the editor session work same-origin.
 import react from "@astrojs/react";
 import icon from "astro-iconset";
 import { defineConfig, fontProviders } from "astro/config";
@@ -26,35 +23,25 @@ try {
 	// no .env — the environment must carry the values
 }
 
-const snapshotFile = process.env.EMDASH_SNAPSHOT_DB;
 const backend = (process.env.BACKEND_URL || "").replace(/\/+$/, "");
-const liveMode = !snapshotFile && !!backend && !!process.env.EMDASH_API_TOKEN;
+if (!backend || !process.env.EMDASH_API_TOKEN) {
+	throw new Error(
+		"BACKEND_URL and EMDASH_API_TOKEN are required — copy .env.example to .env (admins: <site>/_emdash/api/settings/frontend-token).",
+	);
+}
 
-const database = liveMode
-	? {
-			entrypoint: "@premium-cms/emdash/db/snapshot-live",
-			config: {
-				url: backend,
-				token: process.env.EMDASH_API_TOKEN,
-				includeDrafts: ["1", "true"].includes(process.env.EMDASH_INCLUDE_DRAFTS || ""),
-			},
-			type: "sqlite",
-			supportsRequestScope: false,
-			supportsCoalescing: false,
-			supportsCollectionDeletionGuard: false,
-		}
-	: {
-			entrypoint: "@premium-cms/emdash/db/sqlite",
-			config: { url: `file:${snapshotFile || "snapshot.db"}` },
-			type: "sqlite",
-			migrations: {
-				entrypoint: "@premium-cms/emdash/db/sqlite-migrations",
-				manifestConfig: { url: `file:${snapshotFile || "snapshot.db"}` },
-			},
-			supportsRequestScope: false,
-			supportsCoalescing: false,
-			supportsCollectionDeletionGuard: false,
-		};
+const database = {
+	entrypoint: "@premium-cms/emdash/db/snapshot-live",
+	config: {
+		url: backend,
+		token: process.env.EMDASH_API_TOKEN,
+		includeDrafts: ["1", "true"].includes(process.env.EMDASH_INCLUDE_DRAFTS || ""),
+	},
+	type: "sqlite",
+	supportsRequestScope: false,
+	supportsCoalescing: false,
+	supportsCollectionDeletionGuard: false,
+};
 
 // On GitHub Pages project sites the URL is <user>.github.io/<repo>, so split
 // SITE_URL into the origin (site) and the subpath (base) — otherwise assets are
@@ -69,11 +56,9 @@ export default defineConfig({
 	site: _site,
 	base: _base,
 	image: { layout: "constrained", responsiveStyles: true },
-	// In live mode the dev server forwards backend API calls (forms, commerce,
-	// auth) to the live instance, so client-side features work same-origin.
-	vite: liveMode
-		? { server: { proxy: { "/_emdash": { target: backend, changeOrigin: true } } } }
-		: {},
+	// The dev server forwards backend API calls (forms, commerce, auth, the
+	// editor session) to the live instance; ignored by `astro build`.
+	vite: { server: { proxy: { "/_emdash": { target: backend, changeOrigin: true } } } },
 	integrations: [
 		react(),
 		icon({ include: { ph: ["chart-bar","check-circle","clock","cloud","code","currency-dollar","envelope","globe","heart","lifebuoy","lightning","lock","shield-check","sparkle","star","users-three"] } }),
